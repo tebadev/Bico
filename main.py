@@ -1,36 +1,60 @@
+import sys
+import threading
+import numpy as np
 import sounddevice as sd
 from scipy.io.wavfile import write
-import numpy as np 
-from pynput import keyboard
+from PySide6.QtCore import QObject, Signal, Slot, Property, QTimer
+from PySide6.QtGui import QGuiApplication
+from PySide6.QtQml import QQmlApplicationEngine
 
-# Configuración
-frecuencia = 44100
-canales = 2
-nombre_prueba = "pureba.wav"
-datos_audio = []
-grabando = True 
 
-def al_presionar(tecla):
-    global grabando
-    try:
-        if tecla.char == "s":
-            grabando = False
-            return False
-    except AttributeError:
-        pass
+# --- Lo nuevo: clase que conecta Python con la interfaz ---
+class Grabadora(QObject):
+    mensajeCambiado = Signal(str)
+    nivelAudioCambiado = Signal(float)
+    grabandoCambiado = Signal(bool)
 
-escuchador = keyboard.Listener(on_press=al_presionar)
-escuchador.start()
+    def __init__(self):
+        super().__init__()
+        self._grabando = False
 
-# Grabación 
+    @Property(bool, notify=grabandoCambiado)
+    def grabando(self):
+        return self._grabando
 
-with sd.InputStream(samplerate=frecuencia, channels=canales) as micro:
-    while grabando:
-        trozo, desborde = micro.read(512)
-        datos_audio.append(trozo.copy())
+    @Slot(str)
+    def iniciarGrabacion(self, nombre_archivo):
+        self._grabando = True
+        self.grabandoCambiado.emit(True)
+        self.mensajeCambiado.emit("Grabando...")
+        threading.Thread(target=self._grabar, args=(nombre_archivo,), daemon=True).start()
 
-# Guardado
-if datos_audio:
-    audio_final = np.concatenate(datos_audio, axis=0)
-    write(nombre_prueba, frecuencia, audio_final)
-    print ("todo listo")
+    @Slot()
+    def detenerGrabacion(self):
+        self._grabando = False
+
+    # --- Lógica original de tu amigo, casi sin cambios ---
+    def _grabar(self, nombre_prueba):
+        frecuencia = 44100
+        canales = 2
+        datos_audio = []
+
+        with sd.InputStream(samplerate=frecuencia, channels=canales) as micro:
+            while self._grabando:
+                trozo, desborde = micro.read(512)
+                datos_audio.append(trozo.copy())
+
+        if datos_audio:
+            audio_final = np.concatenate(datos_audio, axis=0)
+            write(nombre_prueba, frecuencia, audio_final)
+            self.mensajeCambiado.emit("todo listo")
+
+        self.grabandoCambiado.emit(False)
+
+
+app = QGuiApplication(sys.argv)
+grabadora = Grabadora()
+engine = QQmlApplicationEngine()
+engine.rootContext().setContextProperty("grabadora", grabadora)
+engine.load("src/ui/main.qml")
+sys.exit(app.exec())
