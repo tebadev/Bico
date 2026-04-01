@@ -8,7 +8,7 @@ from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine
 
 
-# --- Lo nuevo: clase que conecta Python con la interfaz ---
+
 class Grabadora(QObject):
     mensajeCambiado = Signal(str)
     nivelAudioCambiado = Signal(float)
@@ -33,7 +33,6 @@ class Grabadora(QObject):
     def detenerGrabacion(self):
         self._grabando = False
 
-    # --- Lógica original de tu amigo, casi sin cambios ---
     def _grabar(self, nombre_prueba):
         frecuencia = 44100
         canales = 2
