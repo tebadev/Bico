@@ -1,7 +1,4 @@
 import os
-import sys
-
-sys.path.insert(0, os.path.dirname(__file__))
 from modules.recorder import AudioUtilidades, inicializador
 
 # ── Configuración por defecto ──────────────────────────────────────────────────
@@ -16,7 +13,7 @@ def limpiar():
 
 def cabecera():
     print("╔══════════════════════════════╗")
-    print("║        🎙  GRABADORA          ║")
+    print("║          GRABADORA           ║")
     print("╚══════════════════════════════╝\n")
 
 def seleccionar_microfono():
@@ -24,7 +21,7 @@ def seleccionar_microfono():
     micros = AudioUtilidades.detectar_microfonos()
 
     if not micros:
-        print("⚠  No se encontraron micrófonos.")
+        print("No se encontraron micrófonos.")
         return None
 
     print("Micrófonos disponibles:\n")
@@ -48,7 +45,7 @@ def flujo_grabacion(dispositivo_id):
 
     print("Iniciando grabación… (Ctrl+C para cancelar)\n")
     grabadora = inicializador(FRECUENCIA, CANALES, dispositivo_id)
-    print("🔴 Grabando\n")
+    print("Grabando\n")
 
     try:
         while True:
@@ -57,19 +54,19 @@ def flujo_grabacion(dispositivo_id):
 
             if cmd == "p":
                 grabadora.pausar()
-                print("⏸  Pausado\n")
+                print("Pausado\n")
 
             elif cmd == "r":
                 grabadora.reanudar()
-                print("🔴 Grabando\n")
+                print("Grabando\n")
 
             elif cmd == "s":
                 grabadora.detener()
-                print("\n⏹  Grabación detenida.")
+                print("\nGrabación detenida.")
                 break
 
             else:
-                print("  Comando no reconocido.\n")
+                print("Comando no reconocido.\n")
 
     except KeyboardInterrupt:
         grabadora.detener()
@@ -84,14 +81,20 @@ def flujo_grabacion(dispositivo_id):
     nombre = input("\nNombre del archivo (sin extensión): ").strip()
     if not nombre:
         nombre = "grabacion"
+    FORMATOS = ["wav", "flac", "ogg", "mp3"]
+    print("\nFormatos disponibles: " + ", ".join(FORMATOS))
+    formato = input("Formato (Enter = wav): ").strip().lower()
+    if formato not in FORMATOS:
+        formato = "wav"
+        return
 
     AudioUtilidades.guardar_archivo(
         ruta_origen=grabadora.archivo_temporal,
         directorio_destino=DIRECTORIO,
         nombre_final=nombre,
-        formato=FORMATO,
+        formato=formato,
     )
-    print(f"\n✅ Guardado en: {DIRECTORIO}/{nombre}.{FORMATO}\n")
+    print(f"\nGuardado en: {DIRECTORIO}/{nombre}.{FORMATO}\n")
 
 # ── Menú principal ─────────────────────────────────────────────────────────────
 def menu():

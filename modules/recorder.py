@@ -1,7 +1,7 @@
 import sounddevice as sd
 import soundfile as sf
-from pydub import AudioSegment
 import shutil
+import subprocess
 import os
 import threading
 import tempfile
@@ -26,12 +26,20 @@ class AudioUtilidades:
                 # Si es wav, solo movemos el archivo
                 shutil.move(ruta_origen, ruta_completa)
             else: 
-                # Si es otro formato, usamos pydub para la conversión
-                audio = AudioSegment.from_wav(ruta_origen)
-                audio.export(ruta_completa, format=formato.lower())
-                
-                # Borramos el temporal manual
-                os.remove(ruta_origen)
+                # Intentamos con soundfile (WAV, FLAC, OGG sin dependencias extra)
+                try:
+                    data, samplerate = sf.read(ruta_origen)
+                    sf.write(ruta_completa, data, samplerate)
+                    os.remove(ruta_origen)
+                except Exception:
+                    # Si soundfile no soporta el formato (ej. MP3), usamos ffmpeg
+                    subprocess.run(
+                        ["ffmpeg", "-y", "-i", ruta_origen, ruta_completa],
+                        check=True,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL
+                    )
+                    os.remove(ruta_origen)
         except Exception:
             print ("ha ocurrido un error cuando se intento guardar el archivo.")
 
