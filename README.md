@@ -53,7 +53,7 @@ Bico/
 
 ### Instalación de Dependencias
 ```bash
-pip install sounddevice soundfile
+pip install -r requirements.txt
 ```
 
 ## Guía de Uso
