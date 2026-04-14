@@ -1,49 +1,78 @@
-# 🎙️ Bico: Simple Python Audio Recorder
+# Bico
 
-Bico es una herramienta ligera y eficiente escrita en Python para grabar audio en tiempo real. Utiliza la entrada de sonido del sistema y permite detener la grabación de forma interactiva mediante el teclado, guardando el resultado en un archivo de alta fidelidad `.wav`.
+Grabadora de audio asíncrona por línea de comandos, construida en Python.
 
-## ✨ Características
+Utiliza un modelo productor-consumidor con hilos independientes para garantizar capturas estables, sin saltos ni pérdida de datos, incluso bajo carga de procesamiento elevada.
 
-* **Grabación en tiempo real:** Captura audio directamente desde el micrófono predeterminado.
-* **Control por teclado:** Finaliza la grabación de forma segura presionando la tecla `s`.
-* **Salida de alta calidad:** Utiliza una frecuencia de muestreo de 44.1 kHz en estéreo por defecto.
-* **Manejo eficiente de datos:** Utiliza `numpy` para procesar y concatenar los fragmentos de audio grabados.
+---
 
-## 🚀 Requisitos previos
+## Características
 
-Antes de ejecutar el programa, asegúrate de tener instaladas las dependencias necesarias:
+- **Motor asíncrono** — captura en un hilo separado para no bloquear la interfaz
+- **Control en tiempo real** — pausar, reanudar y detener durante la grabación
+- **Detección de hardware** — escaneo dinámico de micrófonos disponibles
+- **Multiformato** — exportación a `.wav`, `.flac`, `.ogg` y `.mp3` (requiere FFmpeg)
+- **Archivos temporales únicos** — evita sobrescritura accidental entre sesiones
 
-pip install sounddevice scipy numpy pynput
+---
 
-Nota: En sistemas Linux, es posible que necesites instalar las cabeceras de portaudio:
+## Requisitos
 
-sudo apt-get install libportaudio2
+**Sistema**
+- Python 3.8+
+- PortAudio (requerido por `sounddevice`)
+- FFmpeg *(opcional, solo para exportar a `.mp3`)*
 
-## 🛠️ Cómo usarlo
+**Python**
+```
+pip install sounddevice soundfile
+```
 
-1. Ejecuta el script:
-   python bico.py
+---
 
-2. **Grabando:** El programa comenzará a capturar audio inmediatamente.
+## Uso
 
-3. **Detener:** Cuando desees finalizar, presiona la tecla `s` en tu teclado.
+```bash
+git clone https://github.com/tebadev/Bico.git
+cd bico
+python main.py
+```
 
-4. **Resultado:** El archivo se guardará automáticamente con el nombre `pureba.wav` en el mismo directorio.
+Al iniciar, el menú principal permite seleccionar el micrófono de entrada. Durante la grabación:
 
-## ⚙️ Configuración
+| Comando | Acción |
+|---------|--------|
+| `p` | Pausar |
+| `r` | Reanudar |
+| `s` | Detener y guardar |
 
-Puedes personalizar los parámetros de grabación directamente en el código.
+Al detener, se solicitará el nombre del archivo y el formato de salida.
 
-## 📦 Tecnologías utilizadas
+---
 
-* `pynput`: Para escuchar eventos del teclado en segundo plano.
-* `sounddevice`: Para gestionar el flujo de entrada del micrófono.
-* `numpy`: Para el manejo y concatenación de arreglos de datos.
-* `scipy`: Para la exportación y guardado del archivo final.
+## Arquitectura
 
-## 📝 Próximas mejoras
+```
+main.py          →  Interfaz CLI y flujo de usuario
+recorder.py
+  ├── Grabadora        →  Motor: captura, cola y escritura en disco
+  └── AudioUtilidades  →  Detección de hardware y conversión de formatos
+```
 
-* [ ] Permitir nombres de archivo personalizados mediante argumentos
-* [ ] Agregar una interfaz gráfica sencilla
-* [ ] Soporte para diferentes formatos de audio (MP3, FLAC)
+---
 
+## Contribuir
+
+1. Haz un fork del repositorio
+2. Crea una rama: `git checkout -b feature/mi-mejora`
+3. Envía un pull request
+
+---
+
+## Licencia
+
+MIT — consulta el archivo `LICENSE` para más detalles.
+
+---
+
+Desarrollado por Esteban, el higor y ars-byte.
