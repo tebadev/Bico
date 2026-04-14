@@ -75,4 +75,8 @@ MIT — consulta el archivo `LICENSE` para más detalles.
 
 ---
 
-Desarrollado por Esteban, el higor y ars-byte.
+Desarrollado por:
+
+https://github.com/Ars-byte
+https://github.com/Igoru1
+https://github.com/tebadev
