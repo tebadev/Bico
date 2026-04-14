@@ -75,8 +75,9 @@ MIT — consulta el archivo `LICENSE` para más detalles.
 
 ---
 
-Desarrollado por:
+## Contribuidores
+- [Ars-byte](https://github.com/Ars-byte) - Mejora de documentación y solucionador de bugs.
 
-https://github.com/Ars-byte
-https://github.com/Igoru1
-https://github.com/tebadev
+- [Igoru1](https://github.com/Igoru1) - Desarrollador de backend.
+
+- [Tebadev](https://github.com/tebadev) - Desarrollador de frontend.
