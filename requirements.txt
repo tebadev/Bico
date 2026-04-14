@@ -1,0 +1,4 @@
+PyGObject
+sounddevice
+soundfile
+numpy
