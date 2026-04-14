@@ -86,7 +86,6 @@ def flujo_grabacion(dispositivo_id):
     formato = input("Formato (Enter = wav): ").strip().lower()
     if formato not in FORMATOS:
         formato = "wav"
-        return
 
     AudioUtilidades.guardar_archivo(
         ruta_origen=grabadora.archivo_temporal,
