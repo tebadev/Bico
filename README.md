@@ -16,6 +16,14 @@ Utiliza un modelo productor-consumidor con hilos independientes para garantizar 
 
 ---
 
+---
+## Preview
+
+<img width="452" height="398" alt="image" src="https://github.com/user-attachments/assets/0ae7d069-2ac2-4df8-85c6-cd5dff86d4a7" />
+
+
+---
+
 ## Requisitos
 
 **Sistema**
