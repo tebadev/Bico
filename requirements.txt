@@ -1,4 +1,4 @@
-PyGObject
+PyQt6
 sounddevice
 soundfile
 numpy
