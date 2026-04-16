@@ -1,55 +1,38 @@
 ***
 
-# Bico - Grabadora de Audio Asíncrona para Linux
+# Bico
 
-Bico es una potente grabadora de audio asíncrona para entornos Linux, diseñada bajo un modelo de arquitectura **productor-consumidor**. Utiliza hilos independientes para garantizar una captura de datos estable y de alta fidelidad, eliminando el riesgo de pérdida de paquetes o saltos en el audio, incluso en situaciones de alta carga del sistema.
+Bico es una potente grabadora de audio diseñada para ofrecer máxima estabilidad y fidelidad. Utiliza una arquitectura **Productor-Consumidor** mediante hilos independientes, garantizando una captura de datos fluida sin riesgo de pérdida de paquetes o saltos en el audio, incluso bajo carga del sistema.
 
 ## Características Principales
 
-- **Motor Asíncrono de Alto Rendimiento**: Procesamiento de audio en hilos dedicados para evitar bloqueos en la interfaz de usuario.
-- **Dual Interface**: Soporte nativo para terminales (TTY/CLI) y entorno gráfico moderno basado en GTK.
-- **Control de Flujo en Tiempo Real**: Interacción dinámica para pausar, reanudar y detener grabaciones sin procesamientos posteriores lentos.
-- **Gestión Inteligente de Hardware**: Escaneo dinámico y selección de dispositivos de entrada de audio (micrófonos).
+- **Motor Asíncrono de Alto Rendimiento**: Procesamiento de audio en hilos dedicados para evitar bloqueos.
+- **Dual Interface**: Soporte para entorno gráfico moderno (**PyQt6**) y terminales (**TTY/CLI**).
+- **Sistema de Temas**: Interfaz gráfica con modo Oscuro y Claro dinámico.
+- **Gestión de Hardware**: Escaneo dinámico y selección de dispositivos de entrada de audio (micrófonos).
 - **Soporte Multiformato**: Exportación versátil a `.wav`, `.flac`, `.ogg` y `.mp3` (vía FFmpeg).
-- **Seguridad de Datos**: Generación de archivos temporales únicos para prevenir la sobrescritura de sesiones anteriores.
+- **Seguridad de Datos**: Generación de archivos temporales únicos para prevenir la sobrescritura.
 
+## Arquitectura del Proyecto
 
-## Previews
-
-GTK VERSION:
-
-<img width="523" height="536" alt="image" src="https://github.com/user-attachments/assets/769b0aea-3a72-497b-a474-c01161662539" />
-
-TTY/CLI VERSION:
-
-
-<img width="420" height="495" alt="image" src="https://github.com/user-attachments/assets/76e67de9-773e-4af7-90bb-5498d5984475" />
-
-
-## Arquitectura del Sistema
-
-El proyecto está organizado de forma modular para separar la lógica de negocio de la presentación:
+El proyecto separa la lógica de negocio de las interfaces de usuario para permitir múltiples frontends:
 
 ```
 Bico/
-├── main.py           → Interfaz CLI (TTY) y flujo de usuario.
-├── gui.py            → Interfaz gráfica (GTK).
-└── core/
-    ├── recorder.py   → Motor de audio: gestión de colas y escritura asíncrona.
-    └── utils.py      → Detección de hardware y manejo de formatos.
+├── UI.py             → Interfaz gráfica principal (PyQt6).
+├── main.py           → Interfaz de línea de comandos (TTY).
+├── modules/
+│   ├── recorder.py   → Motor de audio y utilidades de hardware.
+│   └── __init__.py
+└── grabaciones/      → Carpeta de destino de los archivos finales.
 ```
-
-- `recorder.py`: El núcleo del sistema. Contiene el motor de captura y las utilidades de conversión de audio.
-- `main.py`: Punto de entrada para la interfaz de línea de comandos (TTY).
-- `gui.py` (o `main_gtk.py`): Interfaz gráfica desarrollada en GTK para una experiencia de escritorio integrada.
 
 ## Instalación
 
 ### Requisitos del Sistema
-- Python 3.8+
-- PortAudio: Necesario para la biblioteca `sounddevice`.
-- FFmpeg: Opcional (requerido para exportación a `.mp3`).
-- GTK 3/4: Requerido para ejecutar la versión gráfica.
+- **Python 3.8+**
+- **PortAudio**: Necesario para la biblioteca `sounddevice`.
+- **FFmpeg**: Opcional (requerido para exportación a `.mp3`).
 
 ### Instalación de Dependencias
 ```bash
@@ -58,31 +41,39 @@ pip install -r requirements.txt
 
 ## Guía de Uso
 
+### Interfaz Gráfica (PyQt6)
+Diseñada para una experiencia de escritorio intuitiva y moderna.
+```bash
+python UI.py
+```
+## Preview UI:
+
+<img width="963" height="973" alt="image" src="https://github.com/user-attachments/assets/3165beb4-b37c-4cea-ab74-b595321d0e0f" />
+
+
 ### Interfaz de Terminal (TTY)
+Ideal para entornos remotos o usuarios que prefieren la consola.
 ```bash
 python main.py
 ```
-
 | Comando | Acción |
 |---------|--------|
 | `p`     | Pausar la grabación actual |
 | `r`     | Reanudar la grabación |
 | `s`     | Detener y proceder a guardar el archivo |
 
-### Interfaz Gráfica (GTK)
-```bash
-python gui.py
-```
+## Preview tty:
 
-Ofrece controles visuales intuitivos para la selección de dispositivos y gestión de archivos.
+<img width="328" height="444" alt="image" src="https://github.com/user-attachments/assets/419e9170-3568-4688-91e5-82a9cd0db6b7" />
+
 
 ## Contribuidores
 
-Bico es el resultado del esfuerzo conjunto de desarrolladores enfocados en la eficiencia y la experiencia de usuario:
+Bico es el resultado del desarrollo conjunto enfocado en la eficiencia y la experiencia de usuario:
 
-- **Igoru1** - Backend Architect: Desarrollo del motor de audio asíncrono y la lógica de integración con la UI.
-- **Ars-byte** - UI/UX & Core Support: Desarrollo de la interfaz gráfica en GTK, optimización de documentación técnica y resolución de bugs críticos.
-- **Tebadev** - Frontend Lead: Diseño y lógica de la interfaz de usuario original.
+- **[Igoru1](https://github.com/Igoru1)** - *Backend Architect*: Desarrollo del motor de audio asíncrono, gestión de buffers y lógica central de grabación.
+- **[Ars-byte](https://github.com/Ars-byte)** - *UI Lead (PyQt6) & Integration*: Desarrollo completo de la interfaz gráfica en PyQt6, diseño del sistema de temas, resolución de clics/bugs de concurrencia y optimización del flujo de guardado.
+- **[tebadev](https://github.com/tebadev)** - *Original Lead*: Diseño y lógica inicial del proyecto.
 
 ## Licencia
 
