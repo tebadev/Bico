@@ -2,6 +2,8 @@
 
 # Bico
 
+> 🇦🇷 Español | [🇬🇧 English](README-EN.md)
+
 Bico es una potente grabadora de audio diseñada para ofrecer máxima estabilidad y fidelidad. Utiliza una arquitectura **Productor-Consumidor** mediante hilos independientes, garantizando una captura de datos fluida sin riesgo de pérdida de paquetes o saltos en el audio, incluso bajo carga del sistema.
 
 ## Características Principales
