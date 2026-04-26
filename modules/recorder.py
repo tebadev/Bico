@@ -31,7 +31,8 @@ class AudioUtilidades:
                     data, samplerate = sf.read(ruta_origen)
                     sf.write(ruta_completa, data, samplerate)
                     os.remove(ruta_origen)
-                except Exception:
+                except Exception as e:
+                    print(f"soundfile no pudo convertir a {formato}, intentando con ffmpeg: {e}")
                     # Si soundfile no soporta el formato (ej. MP3), usamos ffmpeg
                     subprocess.run(
                         ["ffmpeg", "-y", "-i", ruta_origen, ruta_completa],
@@ -40,8 +41,8 @@ class AudioUtilidades:
                         stderr=subprocess.DEVNULL
                     )
                     os.remove(ruta_origen)
-        except Exception:
-            print ("ha ocurrido un error cuando se intento guardar el archivo.")
+        except Exception as e:
+            print(f"ha ocurrido un error al guardar el archivo: {e}")
 
     @staticmethod
     def detectar_microfonos():
@@ -89,7 +90,7 @@ class Grabadora:
         if self.estado == "grabando":
             self.cola_datos.put(indata.copy())
 
-    # Método que inicializa la gravación.
+    # Método que inicializa la grabación.
     def grabar(self):
         self.estado = "grabando"
 
@@ -131,6 +132,3 @@ def inicializador(frecuencia, canales, dispositivo_id):
     hilo = threading.Thread(target=bico.grabar)
     hilo.start()
     return bico
-
-if __name__ == "__main__":
-    pass
