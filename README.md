@@ -66,7 +66,7 @@ python main.py
 
 ## Preview tty:
 
-<img width="328" height="444" alt="image" src="https://github.com/user-attachments/assets/419e9170-3568-4688-91e5-82a9cd0db6b7" />
+<img width="334" height="498" alt="imagen" src="https://github.com/user-attachments/assets/76683b54-799e-4b54-a764-666e38186644" />
 
 
 ## Contribuidores
