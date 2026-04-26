@@ -1,5 +1,4 @@
 import os
-import sys
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
@@ -9,12 +8,7 @@ from PySide6.QtCore import Qt, QTimer
 
 from ui.styles import TEMAS, obtener_estilo
 from ui.dialogs import DialogoGuardar
-
-try:
-    from modules.recorder import AudioUtilidades, inicializador
-except ImportError:
-    sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'modules'))
-    from modules.recorder import AudioUtilidades, inicializador
+from modules.recorder import AudioUtilidades, inicializador
 
 
 class BicoApp(QWidget):
@@ -29,7 +23,8 @@ class BicoApp(QWidget):
 
         try:
             self.micros = list(AudioUtilidades.detectar_microfonos())
-        except Exception:
+        except Exception as e:
+            print(f"Error al detectar micrófonos: {e}")
             self.micros = []
 
         self._setup_ui()
@@ -166,10 +161,13 @@ class BicoApp(QWidget):
         self.lbl_e.setStyleSheet("color: #888888;")
         self.b_pau.setEnabled(False)
         self.b_stp.setEnabled(False)
-        QTimer.singleShot(1200, self._finalizar_guardado)
+        motor_ref = self.motor  # Guardar referencia para evitar que el recolector de basura lo elimine antes de tiempo y evitar race confditions
+        QTimer.singleShot(1200, lambda: self._finalizar_guardado(motor_ref))
 
-    def _finalizar_guardado(self):
-        tmp = self.motor.archivo_temporal
+    def _finalizar_guardado(self, motor_ref):
+        if not motor_ref:
+            return
+        tmp = motor_ref.archivo_temporal
         fmt = self.cb_fmt.currentText().lower()
 
         if tmp and os.path.exists(tmp):
