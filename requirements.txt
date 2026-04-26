@@ -1,4 +1,4 @@
-PyQt6
+Pyside6
 sounddevice
 soundfile
 numpy
