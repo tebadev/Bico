@@ -50,7 +50,7 @@ python UI.py
 ```
 ## Preview UI:
 
-<img width="963" height="973" alt="image" src="https://github.com/user-attachments/assets/3165beb4-b37c-4cea-ab74-b595321d0e0f" />
+<img width="334" height="498" alt="imagen" src="https://github.com/user-attachments/assets/76683b54-799e-4b54-a764-666e38186644" />
 
 
 ### Interfaz de Terminal (TTY)
