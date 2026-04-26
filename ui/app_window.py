@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QLabel, QPushButton, QComboBox, QLineEdit, QFileDialog
 )
 from PySide6.QtCore import Qt, QTimer, QRectF
-from PySide6.QtGui import QPainter, QColor, QPen, QLinearGradient
+from PySide6.QtGui import QPainter, QColor
 
 from ui.styles import TEMAS, obtener_estilo
 from ui.dialogs import DialogoGuardar
@@ -24,9 +24,8 @@ class BarrasNivel(QWidget):
     """
 
     N_BARRAS = 12
-    SUAVIZADO = 6  # cuántas muestras promediar (más = más suave pero más lento)
+    SUAVIZADO = 6
 
-    # Colores del gradiente: verde → amarillo → rojo
     COLORES_ACTIVOS = [
         "#2ECC8B", "#2ECC8B", "#2ECC8B", "#2ECC8B",
         "#F0C040", "#F0C040", "#F0C040",
@@ -39,9 +38,11 @@ class BarrasNivel(QWidget):
         self.setFixedHeight(56)
         self._nivel = 0.0
         self._historial = deque([0.0] * self.SUAVIZADO, maxlen=self.SUAVIZADO)
+        # Nombre estático, sin descripción dinámica — actualizarla 20 veces/s
+        # sería molesto con Orca
+        self.setAccessibleName("Nivel de audio del micrófono")
 
     def set_nivel(self, valor: float):
-        """Recibe un valor entre 0.0 y 1.0 y actualiza el widget."""
         self._historial.append(max(0.0, min(1.0, valor)))
         self._nivel = sum(self._historial) / len(self._historial)
         self.update()
@@ -60,19 +61,15 @@ class BarrasNivel(QWidget):
         radio = 3
 
         for i in range(n):
-            # Umbral que esta barra representa (de 0 a 1)
             umbral = (i + 1) / n
             activa = self._nivel >= umbral
 
             x = gap + i * (barra_w + gap)
-
-            # Altura escalonada: las barras de la derecha son más altas
             altura_max = int(h * 0.35 + h * 0.65 * (i / (n - 1)))
             y = h - altura_max
 
             if activa:
                 color = QColor(self.COLORES_ACTIVOS[i])
-                # Pequeño brillo cuando la barra está activa
                 color.setAlpha(230)
             else:
                 color = self.COLOR_INACTIVO
@@ -91,7 +88,7 @@ class BarrasNivel(QWidget):
 class BicoApp(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Bivo Recorder")
+        self.setWindowTitle("Bico Recorder")
         self.setFixedSize(320, 460)
 
         self.motor = None
@@ -124,6 +121,7 @@ class BicoApp(QWidget):
         self.btn_tema.setObjectName("btn_tema")
         self.btn_tema.setFixedSize(32, 32)
         self.btn_tema.clicked.connect(self._toggle_tema)
+        self.btn_tema.setAccessibleName("Cambiar tema")
         header.addWidget(self.btn_tema)
         root.addLayout(header)
 
@@ -131,21 +129,22 @@ class BicoApp(QWidget):
         self.lbl_t = QLabel("00:00")
         self.lbl_t.setObjectName("reloj")
         self.lbl_t.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_t.setAccessibleName("Temporizador")
         root.addWidget(self.lbl_t)
 
         # Estado
         self.lbl_e = QLabel("LISTO")
         self.lbl_e.setObjectName("estado")
         self.lbl_e.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_e.setAccessibleName("Estado de la grabadora")
         root.addWidget(self.lbl_e)
 
         root.addSpacing(12)
 
-        # ── Barras de nivel verticales ──
+        # Barras de nivel
         self.barras_nivel = BarrasNivel()
         root.addWidget(self.barras_nivel)
 
-        # Timer para actualizar las barras (50ms = ~20fps, suficiente para audio)
         self.timer_barras = QTimer()
         self.timer_barras.timeout.connect(self._actualizar_barras)
 
@@ -154,6 +153,7 @@ class BicoApp(QWidget):
         # Selector de micrófono
         root.addWidget(QLabel("Micrófono:"))
         self.cb_mic = QComboBox()
+        self.cb_mic.setAccessibleName("Micrófono")
         self.cb_mic.addItem("Por defecto")
         for _, nombre in self.micros:
             self.cb_mic.addItem(nombre)
@@ -162,6 +162,7 @@ class BicoApp(QWidget):
         # Selector de formato
         root.addWidget(QLabel("Formato:"))
         self.cb_fmt = QComboBox()
+        self.cb_fmt.setAccessibleName("Formato de exportación")
         self.cb_fmt.addItems(["WAV", "MP3", "FLAC", "OGG"])
         root.addWidget(self.cb_fmt)
 
@@ -172,8 +173,10 @@ class BicoApp(QWidget):
         carpeta_layout = QHBoxLayout()
         self.txt_carpeta = QLineEdit("grabaciones")
         self.txt_carpeta.setReadOnly(True)
+        self.txt_carpeta.setAccessibleName("Carpeta de destino")
         self.btn_carpeta = QPushButton("...")
         self.btn_carpeta.setFixedWidth(32)
+        self.btn_carpeta.setAccessibleName("Elegir carpeta")
         self.btn_carpeta.clicked.connect(self._elegir_carpeta)
         carpeta_layout.addWidget(self.txt_carpeta)
         carpeta_layout.addWidget(self.btn_carpeta)
@@ -184,6 +187,10 @@ class BicoApp(QWidget):
         self.b_rec = QPushButton("⏺ Grabar")
         self.b_pau = QPushButton("⏸ Pausar")
         self.b_stp = QPushButton("⏹ Parar")
+
+        self.b_rec.setAccessibleName("Grabar")
+        self.b_pau.setAccessibleName("Pausar")
+        self.b_stp.setAccessibleName("Parar")
 
         for b in [self.b_rec, self.b_pau, self.b_stp]:
             btns.addWidget(b)
@@ -247,10 +254,12 @@ class BicoApp(QWidget):
             self.motor.pausar()
             self.lbl_e.setText("PAUSADO")
             self.b_pau.setText("▶ Reanudar")
+            self.b_pau.setAccessibleName("Reanudar")
         else:
             self.motor.reanudar()
             self.lbl_e.setText("GRABANDO...")
             self.b_pau.setText("⏸ Pausar")
+            self.b_pau.setAccessibleName("Pausar")
 
     def on_stp(self):
         if not self.motor:
@@ -265,7 +274,7 @@ class BicoApp(QWidget):
         self.b_pau.setEnabled(False)
         self.b_stp.setEnabled(False)
 
-        motor_ref = self.motor  # Guardar ref para evitar GC prematuro y race conditions
+        motor_ref = self.motor
         QTimer.singleShot(1200, lambda: self._finalizar_guardado(motor_ref))
 
     def _finalizar_guardado(self, motor_ref):
@@ -282,6 +291,7 @@ class BicoApp(QWidget):
         self.lbl_t.setText("00:00")
         self.b_rec.setEnabled(True)
         self.b_pau.setText("⏸ Pausar")
+        self.b_pau.setAccessibleName("Pausar")
         self.cb_mic.setEnabled(True)
         self.cb_fmt.setEnabled(True)
         self.motor = None
@@ -306,6 +316,4 @@ class BicoApp(QWidget):
     def _actualizar_barras(self):
         if not self.motor:
             return
-        # nivel_actual ya viene normalizado dinámicamente (0.0–1.0)
-        # sin importar el volumen del sistema del usuario
         self.barras_nivel.set_nivel(self.motor.nivel_actual)
