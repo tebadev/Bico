@@ -1,21 +1,98 @@
 import os
+from collections import deque
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QPushButton, QComboBox,
+    QLabel, QPushButton, QComboBox, QLineEdit, QFileDialog
 )
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QRectF
+from PySide6.QtGui import QPainter, QColor, QPen, QLinearGradient
 
 from ui.styles import TEMAS, obtener_estilo
 from ui.dialogs import DialogoGuardar
 from modules.recorder import AudioUtilidades, inicializador
 
 
+# ──────────────────────────────────────────────
+# Widget de barras de nivel verticales
+# ──────────────────────────────────────────────
+
+class BarrasNivel(QWidget):
+    """
+    Visualizador de nivel de audio con barras verticales escalonadas.
+    Usa un promedio móvil para suavizar la animación y evitar saltos bruscos.
+    """
+
+    N_BARRAS = 12
+    SUAVIZADO = 6  # cuántas muestras promediar (más = más suave pero más lento)
+
+    # Colores del gradiente: verde → amarillo → rojo
+    COLORES_ACTIVOS = [
+        "#2ECC8B", "#2ECC8B", "#2ECC8B", "#2ECC8B",
+        "#F0C040", "#F0C040", "#F0C040",
+        "#FF6B6B", "#FF6B6B", "#FF6B6B", "#FF6B6B", "#FF6B6B",
+    ]
+    COLOR_INACTIVO = QColor(120, 120, 120, 35)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedHeight(56)
+        self._nivel = 0.0
+        self._historial = deque([0.0] * self.SUAVIZADO, maxlen=self.SUAVIZADO)
+
+    def set_nivel(self, valor: float):
+        """Recibe un valor entre 0.0 y 1.0 y actualiza el widget."""
+        self._historial.append(max(0.0, min(1.0, valor)))
+        self._nivel = sum(self._historial) / len(self._historial)
+        self.update()
+
+    def paintEvent(self, _event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        w = self.width()
+        h = self.height()
+        n = self.N_BARRAS
+
+        gap = 5
+        total_gaps = gap * (n + 1)
+        barra_w = max(4, (w - total_gaps) // n)
+        radio = 3
+
+        for i in range(n):
+            # Umbral que esta barra representa (de 0 a 1)
+            umbral = (i + 1) / n
+            activa = self._nivel >= umbral
+
+            x = gap + i * (barra_w + gap)
+
+            # Altura escalonada: las barras de la derecha son más altas
+            altura_max = int(h * 0.35 + h * 0.65 * (i / (n - 1)))
+            y = h - altura_max
+
+            if activa:
+                color = QColor(self.COLORES_ACTIVOS[i])
+                # Pequeño brillo cuando la barra está activa
+                color.setAlpha(230)
+            else:
+                color = self.COLOR_INACTIVO
+
+            p.setBrush(color)
+            p.setPen(Qt.PenStyle.NoPen)
+            p.drawRoundedRect(QRectF(x, y, barra_w, altura_max), radio, radio)
+
+        p.end()
+
+
+# ──────────────────────────────────────────────
+# Ventana principal
+# ──────────────────────────────────────────────
+
 class BicoApp(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Bivo Recorder")
-        self.setFixedSize(320, 430)
+        self.setFixedSize(320, 460)
 
         self.motor = None
         self.segundos = 0
@@ -33,9 +110,9 @@ class BicoApp(QWidget):
         self.timer_reloj = QTimer()
         self.timer_reloj.timeout.connect(self._actualizar_reloj)
 
-    # ------------------------------------------------------------------
+    # ──────────────────────────────────────────────
     # UI setup
-    # ------------------------------------------------------------------
+    # ──────────────────────────────────────────────
 
     def _setup_ui(self):
         root = QVBoxLayout(self)
@@ -62,7 +139,17 @@ class BicoApp(QWidget):
         self.lbl_e.setAlignment(Qt.AlignmentFlag.AlignCenter)
         root.addWidget(self.lbl_e)
 
-        root.addSpacing(15)
+        root.addSpacing(12)
+
+        # ── Barras de nivel verticales ──
+        self.barras_nivel = BarrasNivel()
+        root.addWidget(self.barras_nivel)
+
+        # Timer para actualizar las barras (50ms = ~20fps, suficiente para audio)
+        self.timer_barras = QTimer()
+        self.timer_barras.timeout.connect(self._actualizar_barras)
+
+        root.addSpacing(8)
 
         # Selector de micrófono
         root.addWidget(QLabel("Micrófono:"))
@@ -79,6 +166,18 @@ class BicoApp(QWidget):
         root.addWidget(self.cb_fmt)
 
         root.addStretch()
+
+        root.addWidget(QLabel("Carpeta de destino:"))
+
+        carpeta_layout = QHBoxLayout()
+        self.txt_carpeta = QLineEdit("grabaciones")
+        self.txt_carpeta.setReadOnly(True)
+        self.btn_carpeta = QPushButton("...")
+        self.btn_carpeta.setFixedWidth(32)
+        self.btn_carpeta.clicked.connect(self._elegir_carpeta)
+        carpeta_layout.addWidget(self.txt_carpeta)
+        carpeta_layout.addWidget(self.btn_carpeta)
+        root.addLayout(carpeta_layout)
 
         # Botones de control
         btns = QHBoxLayout()
@@ -97,9 +196,9 @@ class BicoApp(QWidget):
         self.b_stp.setEnabled(False)
         root.addLayout(btns)
 
-    # ------------------------------------------------------------------
+    # ──────────────────────────────────────────────
     # Tema
-    # ------------------------------------------------------------------
+    # ──────────────────────────────────────────────
 
     def _aplicar_tema(self):
         self.setStyleSheet(obtener_estilo(TEMAS[self.tema]))
@@ -109,9 +208,9 @@ class BicoApp(QWidget):
         self.tema = "claro" if self.tema == "oscuro" else "oscuro"
         self._aplicar_tema()
 
-    # ------------------------------------------------------------------
+    # ──────────────────────────────────────────────
     # Reloj
-    # ------------------------------------------------------------------
+    # ──────────────────────────────────────────────
 
     def _actualizar_reloj(self):
         if self.motor and self.motor.estado == "grabando":
@@ -119,9 +218,9 @@ class BicoApp(QWidget):
             m, s = divmod(self.segundos, 60)
             self.lbl_t.setText(f"{m:02d}:{s:02d}")
 
-    # ------------------------------------------------------------------
+    # ──────────────────────────────────────────────
     # Acciones de grabación
-    # ------------------------------------------------------------------
+    # ──────────────────────────────────────────────
 
     def on_rec(self):
         idx = self.cb_mic.currentIndex()
@@ -139,6 +238,7 @@ class BicoApp(QWidget):
         self.cb_mic.setEnabled(False)
         self.cb_fmt.setEnabled(False)
         self.timer_reloj.start(1000)
+        self.timer_barras.start(50)
 
     def on_pau(self):
         if not self.motor:
@@ -157,11 +257,15 @@ class BicoApp(QWidget):
             return
         self.motor.detener()
         self.timer_reloj.stop()
+        self.timer_barras.stop()
+        self.barras_nivel.set_nivel(0.0)
+
         self.lbl_e.setText("FINALIZANDO...")
         self.lbl_e.setStyleSheet("color: #888888;")
         self.b_pau.setEnabled(False)
         self.b_stp.setEnabled(False)
-        motor_ref = self.motor  # Guardar referencia para evitar que el recolector de basura lo elimine antes de tiempo y evitar race confditions
+
+        motor_ref = self.motor  # Guardar ref para evitar GC prematuro y race conditions
         QTimer.singleShot(1200, lambda: self._finalizar_guardado(motor_ref))
 
     def _finalizar_guardado(self, motor_ref):
@@ -185,8 +289,23 @@ class BicoApp(QWidget):
     def _dialogo_nombre(self, tmp: str, fmt: str):
         dlg = DialogoGuardar(self)
         if dlg.exec() == DialogoGuardar.DialogCode.Accepted:
-            os.makedirs("grabaciones", exist_ok=True)
-            AudioUtilidades.guardar_archivo(tmp, "grabaciones", dlg.nombre, fmt)
+            AudioUtilidades.guardar_archivo(tmp, self.txt_carpeta.text(), dlg.nombre, fmt)
         else:
             if os.path.exists(tmp):
                 os.remove(tmp)
+
+    def _elegir_carpeta(self):
+        carpeta = QFileDialog.getExistingDirectory(self, "Seleccionar carpeta", self.txt_carpeta.text())
+        if carpeta:
+            self.txt_carpeta.setText(carpeta)
+
+    # ──────────────────────────────────────────────
+    # Barras de nivel
+    # ──────────────────────────────────────────────
+
+    def _actualizar_barras(self):
+        if not self.motor:
+            return
+        # nivel_actual ya viene normalizado dinámicamente (0.0–1.0)
+        # sin importar el volumen del sistema del usuario
+        self.barras_nivel.set_nivel(self.motor.nivel_actual)
