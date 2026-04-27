@@ -9,24 +9,29 @@ Bico es una potente grabadora de audio diseñada para ofrecer máxima estabilida
 ## Características Principales
 
 - **Motor Asíncrono de Alto Rendimiento**: Procesamiento de audio en hilos dedicados para evitar bloqueos.
-- **Dual Interface**: Soporte para entorno gráfico moderno (**PyQt6**) y terminales (**TTY/CLI**).
+- **Normalización Dinámica de Nivel**: Cálculo de nivel por RMS con pico decayente, funciona correctamente con el micrófono a cualquier volumen del sistema.
+- **Visualizador de Nivel de Audio**: Barras verticales escalonadas con colores verde → amarillo → rojo y suavizado por promedio móvil.
 - **Sistema de Temas**: Interfaz gráfica con modo Oscuro y Claro dinámico.
 - **Gestión de Hardware**: Escaneo dinámico y selección de dispositivos de entrada de audio (micrófonos).
+- **Selector de Carpeta de Destino**: Elección del directorio de guardado desde la interfaz antes de grabar.
 - **Soporte Multiformato**: Exportación versátil a `.wav`, `.flac`, `.ogg` y `.mp3` (vía FFmpeg).
 - **Seguridad de Datos**: Generación de archivos temporales únicos para prevenir la sobrescritura.
 
 ## Arquitectura del Proyecto
 
-El proyecto separa la lógica de negocio de las interfaces de usuario para permitir múltiples frontends:
+El proyecto separa la lógica de negocio de la interfaz de usuario:
 
 ```
 Bico/
-├── UI.py             → Interfaz gráfica principal (PyQt6).
-├── main.py           → Interfaz de línea de comandos (TTY).
+├── main.py           → Punto de entrada de la aplicación.
 ├── modules/
-│   ├── recorder.py   → Motor de audio y utilidades de hardware.
+│   ├── recorder.py   → Motor de audio, normalización de nivel y utilidades de hardware.
 │   └── __init__.py
-└── grabaciones/      → Carpeta de destino de los archivos finales.
+└── ui/
+    ├── app_window.py → Ventana principal y visualizador de barras de nivel.
+    ├── dialogs.py    → Diálogos auxiliares (nombre de archivo, etc.).
+    ├── styles.py     → Sistema de temas oscuro/claro.
+    └── __init__.py
 ```
 
 ## Instalación
@@ -43,38 +48,21 @@ pip install -r requirements.txt
 
 ## Guía de Uso
 
-### Interfaz Gráfica (PyQt6)
-Diseñada para una experiencia de escritorio intuitiva y moderna.
-```bash
-python UI.py
-```
-## Preview UI:
-
-<img width="963" height="973" alt="image" src="https://github.com/user-attachments/assets/3165beb4-b37c-4cea-ab74-b595321d0e0f" />
-
-
-### Interfaz de Terminal (TTY)
-Ideal para entornos remotos o usuarios que prefieren la consola.
+### Interfaz Gráfica
 ```bash
 python main.py
 ```
-| Comando | Acción |
-|---------|--------|
-| `p`     | Pausar la grabación actual |
-| `r`     | Reanudar la grabación |
-| `s`     | Detener y proceder a guardar el archivo |
 
-## Preview tty:
+## Preview UI:
 
-<img width="328" height="444" alt="image" src="https://github.com/user-attachments/assets/419e9170-3568-4688-91e5-82a9cd0db6b7" />
-
+<img width="334" height="498" alt="imagen" src="https://github.com/user-attachments/assets/76683b54-799e-4b54-a764-666e38186644" />
 
 ## Contribuidores
 
 Bico es el resultado del desarrollo conjunto enfocado en la eficiencia y la experiencia de usuario:
 
 - **[Igoru1](https://github.com/Igoru1)** - *Backend Architect*: Desarrollo del motor de audio asíncrono, gestión de buffers y lógica central de grabación.
-- **[Ars-byte](https://github.com/Ars-byte)** - *UI Lead (PyQt6) & Integration*: Desarrollo completo de la interfaz gráfica en PyQt6, diseño del sistema de temas, resolución de clics/bugs de concurrencia y optimización del flujo de guardado.
+- **[Ars-byte](https://github.com/Ars-byte)** - *UI Lead (PyQt6) & Integration*: Desarrollo completo de la interfaz gráfica en PySide6, diseño del sistema de temas, resolución de bugs de concurrencia y optimización del flujo de guardado.
 - **[tebadev](https://github.com/tebadev)** - *Original Lead*: Diseño y lógica inicial del proyecto.
 
 ## Licencia
