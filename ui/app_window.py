@@ -11,6 +11,8 @@ from PySide6.QtGui import QPainter, QColor
 from ui.styles import TEMAS, obtener_estilo
 from ui.dialogs import DialogoGuardar
 from modules.recorder import AudioUtilidades, inicializador
+from modules.history_manager import HistoryManager
+from ui.history_dialog import HistoryDialog
 
 
 # ──────────────────────────────────────────────
@@ -18,11 +20,6 @@ from modules.recorder import AudioUtilidades, inicializador
 # ──────────────────────────────────────────────
 
 class BarrasNivel(QWidget):
-    """
-    Visualizador de nivel de audio con barras verticales escalonadas.
-    Usa un promedio móvil para suavizar la animación y evitar saltos bruscos.
-    """
-
     N_BARRAS = 12
     SUAVIZADO = 6
 
@@ -38,8 +35,6 @@ class BarrasNivel(QWidget):
         self.setFixedHeight(56)
         self._nivel = 0.0
         self._historial = deque([0.0] * self.SUAVIZADO, maxlen=self.SUAVIZADO)
-        # Nombre estático, sin descripción dinámica — actualizarla 20 veces/s
-        # sería molesto con Orca
         self.setAccessibleName("Nivel de audio del micrófono")
 
     def set_nivel(self, valor: float):
@@ -89,11 +84,16 @@ class BicoApp(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Bico Recorder")
-        self.setFixedSize(320, 460)
+        self.setMinimumSize(320, 460)                    # Ahora se puede redimensionar
 
         self.motor = None
         self.segundos = 0
         self.tema = "oscuro"
+        self._guardando = False
+        self._motor_pendiente = None                     # Motor que estamos esperando para guardar
+
+        # Gestor del historial de grabaciones
+        self.history_manager = HistoryManager()
 
         try:
             self.micros = list(AudioUtilidades.detectar_microfonos())
@@ -104,8 +104,23 @@ class BicoApp(QWidget):
         self._setup_ui()
         self._aplicar_tema()
 
+        # ── Temporizadores ────────────────────────
         self.timer_reloj = QTimer()
         self.timer_reloj.timeout.connect(self._actualizar_reloj)
+
+        self.timer_barras = QTimer()
+        self.timer_barras.setInterval(50)              # ← Intervalo que faltaba
+        self.timer_barras.timeout.connect(self._actualizar_barras)
+
+        # Temporizador para esperar la finalización real del hilo de grabación
+        self._save_watcher = QTimer()
+        self._save_watcher.setInterval(100)
+        self._save_watcher.timeout.connect(self._check_hilo_terminado)
+
+        # Timeout de seguridad (5 s)
+        self._save_timeout = QTimer()
+        self._save_timeout.setSingleShot(True)
+        self._save_timeout.timeout.connect(self._guardar_por_timeout)
 
     # ──────────────────────────────────────────────
     # UI setup
@@ -114,9 +129,20 @@ class BicoApp(QWidget):
     def _setup_ui(self):
         root = QVBoxLayout(self)
 
-        # Header con botón de tema
+        # Header con botones de historial y tema
         header = QHBoxLayout()
+        # Botón de historial (izquierda)
+        self.btn_historial = QPushButton()
+        self.btn_historial.setObjectName("btn_historial")
+        self.btn_historial.setFixedSize(32, 32)
+        self.btn_historial.setText("...")
+        self.btn_historial.setAccessibleName("Historial")
+        self.btn_historial.clicked.connect(self._mostrar_historial)
+        header.addWidget(self.btn_historial)
+
         header.addStretch()
+
+        # Botón de tema (derecha)
         self.btn_tema = QPushButton()
         self.btn_tema.setObjectName("btn_tema")
         self.btn_tema.setFixedSize(32, 32)
@@ -145,9 +171,6 @@ class BicoApp(QWidget):
         self.barras_nivel = BarrasNivel()
         root.addWidget(self.barras_nivel)
 
-        self.timer_barras = QTimer()
-        self.timer_barras.timeout.connect(self._actualizar_barras)
-
         root.addSpacing(8)
 
         # Selector de micrófono
@@ -171,7 +194,8 @@ class BicoApp(QWidget):
         root.addWidget(QLabel("Carpeta de destino:"))
 
         carpeta_layout = QHBoxLayout()
-        self.txt_carpeta = QLineEdit("grabaciones")
+        carpeta_default = os.path.join(os.path.expanduser("~"), "grabaciones")
+        self.txt_carpeta = QLineEdit(carpeta_default)
         self.txt_carpeta.setReadOnly(True)
         self.txt_carpeta.setAccessibleName("Carpeta de destino")
         self.btn_carpeta = QPushButton("...")
@@ -181,6 +205,8 @@ class BicoApp(QWidget):
         carpeta_layout.addWidget(self.txt_carpeta)
         carpeta_layout.addWidget(self.btn_carpeta)
         root.addLayout(carpeta_layout)
+
+        os.makedirs(self.txt_carpeta.text(), exist_ok=True)
 
         # Botones de control
         btns = QHBoxLayout()
@@ -226,10 +252,26 @@ class BicoApp(QWidget):
             self.lbl_t.setText(f"{m:02d}:{s:02d}")
 
     # ──────────────────────────────────────────────
+    # Historial
+    # ──────────────────────────────────────────────
+
+    def _mostrar_historial(self):
+        dlg = HistoryDialog(self, self.history_manager)
+        dlg.exec()
+
+    # ──────────────────────────────────────────────
     # Acciones de grabación
     # ──────────────────────────────────────────────
 
     def on_rec(self):
+        if self._guardando:
+            return
+
+        # Cancelar cualquier espera de guardado pendiente (motor ya detenido)
+        self._save_watcher.stop()
+        self._save_timeout.stop()
+        self._motor_pendiente = None
+
         idx = self.cb_mic.currentIndex()
         mid = None if idx == 0 else self.micros[idx - 1][0]
 
@@ -245,10 +287,10 @@ class BicoApp(QWidget):
         self.cb_mic.setEnabled(False)
         self.cb_fmt.setEnabled(False)
         self.timer_reloj.start(1000)
-        self.timer_barras.start(50)
+        self.timer_barras.start()
 
     def on_pau(self):
-        if not self.motor:
+        if not self.motor or self._guardando:
             return
         if self.motor.estado == "grabando":
             self.motor.pausar()
@@ -262,8 +304,10 @@ class BicoApp(QWidget):
             self.b_pau.setAccessibleName("Pausar")
 
     def on_stp(self):
-        if not self.motor:
+        if not self.motor or self._guardando:
             return
+
+        self._guardando = True
         self.motor.detener()
         self.timer_reloj.stop()
         self.timer_barras.stop()
@@ -274,18 +318,72 @@ class BicoApp(QWidget):
         self.b_pau.setEnabled(False)
         self.b_stp.setEnabled(False)
 
-        motor_ref = self.motor
-        QTimer.singleShot(1200, lambda: self._finalizar_guardado(motor_ref))
+        # Guardamos la referencia del motor que estamos esperando
+        self._motor_pendiente = self.motor
+        self.motor = None   # Liberamos la referencia principal
+
+        # Iniciamos el watcher que verificará cuándo terminó realmente el hilo
+        self._save_watcher.start()
+        self._save_timeout.start(5000)   # 5 segundos máximo de espera
+
+    # ── Métodos de espera activa para el hilo ──
+
+    def _check_hilo_terminado(self):
+        """Verifica si el hilo de grabación ya terminó (mirando el evento interno)."""
+        motor = self._motor_pendiente
+        if motor is None:
+            self._save_watcher.stop()
+            return
+
+        # El evento _stop_event se activa justo al salir del bucle de grabación.
+        # En ese momento el archivo ya está completamente escrito y cerrado.
+        if motor._stop_event.is_set():
+            self._save_watcher.stop()
+            self._save_timeout.stop()
+            self._finalizar_guardado(motor)
+
+    def _guardar_por_timeout(self):
+        """Se ejecuta si pasó el tiempo máximo de espera."""
+        self._save_watcher.stop()
+        if self._motor_pendiente:
+            self._finalizar_guardado(self._motor_pendiente)
 
     def _finalizar_guardado(self, motor_ref):
         if not motor_ref:
             return
+
         tmp = motor_ref.archivo_temporal
         fmt = self.cb_fmt.currentText().lower()
+        carpeta = self.txt_carpeta.text()
 
         if tmp and os.path.exists(tmp):
-            self._dialogo_nombre(tmp, fmt)
+            self._dialogo_nombre(tmp, fmt, carpeta)
+        else:
+            self._reset_ui()
 
+    def _dialogo_nombre(self, tmp: str, fmt: str, carpeta: str):
+        dlg = DialogoGuardar(self)
+        if dlg.exec() == DialogoGuardar.DialogCode.Accepted:
+            # Construimos la ruta final exactamente igual que en AudioUtilidades
+            nombre_final = dlg.nombre if dlg.nombre.endswith(f".{fmt}") else dlg.nombre + f".{fmt}"
+            ruta_final = os.path.join(carpeta, nombre_final)
+
+            AudioUtilidades.guardar_archivo(tmp, carpeta, dlg.nombre, fmt)
+
+            # Si el archivo se guardó correctamente, lo añadimos al historial
+            if os.path.exists(ruta_final):
+                self.history_manager.add(ruta_final, fmt)
+        else:
+            if os.path.exists(tmp):
+                try:
+                    os.remove(tmp)
+                except Exception as e:
+                    print(f"Error al eliminar archivo temporal: {e}")
+
+        self._reset_ui()
+
+    def _reset_ui(self):
+        """Restaura la interfaz al estado inicial."""
         self.lbl_e.setText("LISTO")
         self.lbl_e.setStyleSheet("")
         self.lbl_t.setText("00:00")
@@ -294,15 +392,8 @@ class BicoApp(QWidget):
         self.b_pau.setAccessibleName("Pausar")
         self.cb_mic.setEnabled(True)
         self.cb_fmt.setEnabled(True)
-        self.motor = None
-
-    def _dialogo_nombre(self, tmp: str, fmt: str):
-        dlg = DialogoGuardar(self)
-        if dlg.exec() == DialogoGuardar.DialogCode.Accepted:
-            AudioUtilidades.guardar_archivo(tmp, self.txt_carpeta.text(), dlg.nombre, fmt)
-        else:
-            if os.path.exists(tmp):
-                os.remove(tmp)
+        self._motor_pendiente = None
+        self._guardando = False
 
     def _elegir_carpeta(self):
         carpeta = QFileDialog.getExistingDirectory(self, "Seleccionar carpeta", self.txt_carpeta.text())
@@ -310,10 +401,24 @@ class BicoApp(QWidget):
             self.txt_carpeta.setText(carpeta)
 
     # ──────────────────────────────────────────────
-    # Barras de nivel
+    # Barras de nivel (ahora también en pausa)
     # ──────────────────────────────────────────────
 
     def _actualizar_barras(self):
-        if not self.motor:
+        if not self.motor or self._guardando:
             return
+        # El motor ya pone nivel_actual = 0.0 en pausa, así que las barras se apagan solas
         self.barras_nivel.set_nivel(self.motor.nivel_actual)
+
+    # ──────────────────────────────────────────────
+    # Limpieza al cerrar
+    # ──────────────────────────────────────────────
+
+    def closeEvent(self, event):
+        if self.motor:
+            self.motor.detener()
+        self._save_watcher.stop()
+        self._save_timeout.stop()
+        self.timer_reloj.stop()
+        self.timer_barras.stop()
+        event.accept()

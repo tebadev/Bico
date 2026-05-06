@@ -9,7 +9,6 @@ import queue
 import numpy as np
 
 
-# Varias utilidades para la grabadora
 class AudioUtilidades:
     @staticmethod
     def guardar_archivo(ruta_origen, directorio_destino, nombre_final, formato="wav"):
@@ -54,7 +53,6 @@ class AudioUtilidades:
         return micros
 
 
-# Motor de la grabadora
 class Grabadora:
     """
     Motor de grabación asíncrono.
@@ -62,12 +60,7 @@ class Grabadora:
     para evitar cortes de audio cuando la PC está lenta.
     """
 
-    # Pico mínimo para arrancar la normalización antes de que el usuario hable.
-    # Evita que las barras estén al 100% en silencio absoluto.
     _PICO_MINIMO = 0.01
-
-    # Cuánto decae el pico máximo por segundo (10% → el pico "olvida" en ~10s).
-    # Si el usuario baja la voz, las barras se re-adaptan gradualmente.
     _DECAIMIENTO = 0.10
 
     def __init__(self, frecuencia, canales, dispositivo_id=None):
@@ -77,51 +70,49 @@ class Grabadora:
         self.dispositivo_id = dispositivo_id
         self.archivo_temporal = None
         self.cola_datos = queue.Queue()
+        self._stop_event = threading.Event()
+        self._lock = threading.Lock()  # protege nivel_actual
 
-        # Nivel RMS actual (0.0 – 1.0, ya normalizado)
         self.nivel_actual = 0.0
-
-        # Pico histórico para normalización dinámica (valor crudo, no normalizado)
         self._pico = self._PICO_MINIMO
 
     def callback(self, indata, frames, _time, status):
-        """
-        Llamado por el SO cada vez que hay audio disponible.
-        Calcula el nivel RMS y actualiza el pico dinámico.
-        """
         if self.estado != "grabando":
             return
 
-        self.cola_datos.put(indata.copy())
+        try:
+            self.cola_datos.put(indata.copy(), timeout=0.1)
+        except queue.Full:
+            pass
 
-        # RMS es más representativo que la media del valor absoluto
         rms = float(np.sqrt(np.mean(indata ** 2)))
 
-        # Actualizar el pico máximo visto hasta ahora
         if rms > self._pico:
             self._pico = rms
         else:
-            # Decaimiento suave: el pico baja un % por cada bloque de audio
-            # frames/frecuencia = duración del bloque en segundos
             bloque_seg = frames / self.frecuencia
             self._pico = max(
                 self._pico * (1.0 - self._DECAIMIENTO * bloque_seg),
                 self._PICO_MINIMO
             )
 
-        # Normalizar: cuánto del pico histórico representa este bloque
-        self.nivel_actual = min(rms / self._pico, 1.0)
+        with self._lock:
+            self.nivel_actual = min(rms / self._pico, 1.0)
 
     def grabar(self):
         self.estado = "grabando"
+        self._stop_event.clear()
 
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tf:
             self.archivo_temporal = tf.name
 
         try:
-            with sf.SoundFile(self.archivo_temporal, mode="w", samplerate=self.frecuencia, channels=self.canales) as archivo:
-                with sd.InputStream(samplerate=self.frecuencia, channels=self.canales, device=self.dispositivo_id, callback=self.callback) as micro:
-                    while self.estado != "detenido" or not self.cola_datos.empty():
+            with sf.SoundFile(self.archivo_temporal, mode="w",
+                              samplerate=self.frecuencia, channels=self.canales) as archivo:
+                with sd.InputStream(samplerate=self.frecuencia, channels=self.canales,
+                                    device=self.dispositivo_id, callback=self.callback) as micro:
+                    # Bucle principal: sale cuando se detiene la grabación y la cola está vacía
+                    while not self._stop_event.is_set() or not self.cola_datos.empty():
                         try:
                             audio_listo = self.cola_datos.get(timeout=0.1)
                             archivo.write(audio_listo)
@@ -129,11 +120,19 @@ class Grabadora:
                             continue
         except Exception as e:
             print(f"Ha ocurrido un error con la grabación: {e}")
+            # Limpiar archivo temporal si ocurre un error
+            if self.archivo_temporal and os.path.exists(self.archivo_temporal):
+                try:
+                    os.remove(self.archivo_temporal)
+                except OSError:
+                    pass
+                self._stop_event.set()
 
     def pausar(self):
         if self.estado == "grabando":
             self.estado = "pausado"
-            self.nivel_actual = 0.0
+            with self._lock:
+                self.nivel_actual = 0.0
 
     def reanudar(self):
         if self.estado == "pausado":
@@ -141,10 +140,11 @@ class Grabadora:
 
     def detener(self):
         self.estado = "detenido"
+        self._stop_event.set()
 
 
 def inicializador(frecuencia, canales, dispositivo_id):
-    bico = Grabadora(frecuencia=frecuencia, canales=canales, dispositivo_id=dispositivo_id)
-    hilo = threading.Thread(target=bico.grabar)
+    grabadora = Grabadora(frecuencia=frecuencia, canales=canales, dispositivo_id=dispositivo_id)
+    hilo = threading.Thread(target=grabadora.grabar, daemon=True)
     hilo.start()
-    return bico
+    return grabadora

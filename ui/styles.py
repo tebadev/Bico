@@ -6,7 +6,7 @@ TEMAS = {
 
 def obtener_estilo(t: dict) -> str:
     return f"""
-        QWidget {{ background-color: {t['bg']}; color: {t['fg']}; font-family: "DejaVu Sans"; }}
+        QWidget {{ background-color: {t['bg']}; color: {t['fg']}; font-family: "DejaVu Sans", sans-serif; }}
         QLabel#reloj {{ font-size: 40px; font-weight: 200; margin: 6px 0; letter-spacing: 2px; }}
         QLabel#estado {{ font-size: 11px; font-weight: bold; }}
         QPushButton {{

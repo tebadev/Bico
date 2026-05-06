@@ -1,0 +1,217 @@
+name: Build Bico
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths:
+      - 'main.py'
+      - 'requirements.txt'
+      - 'modules/**.py'
+      - 'ui/**.py'
+      - 'assets/**'
+      - '.github/workflows/build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y patchelf ccache libportaudio2
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-linux-${{ hashFiles('requirements.txt') }}
+          restore-keys: pip-linux-
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nuitka ordered-set
+
+      - name: Cache Nuitka
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/Nuitka
+          key: nuitka-linux-${{ hashFiles('**/*.py') }}
+          restore-keys: nuitka-linux-
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ccache-linux-${{ hashFiles('**/*.py') }}
+          restore-keys: ccache-linux-
+
+      - name: Compile with Nuitka
+        run: |
+          export PATH="/usr/lib/ccache:$PATH"
+          export CCACHE_DIR=$HOME/.ccache
+          python -m nuitka \
+            --onefile \
+            --enable-plugin=pyside6 \
+            --include-qt-plugins=platforms \
+            --noinclude-qt-plugins=webkit,webengine,multimedia,sql,bluetooth,pdf,printsupport,3d,charts,datavisualization,purchasing,serialbus,serialport,positioning,sensors,nfc,gamepad,qml,qmltooling,networkinformation,tls,imageformats,iconengines \
+            --output-filename=bico \
+            --remove-output \
+            --assume-yes-for-downloads \
+            --static-libpython=yes \
+            main.py
+
+      - name: Build AppImage
+        run: |
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+
+          cp bico AppDir/usr/bin/bico
+          chmod +x AppDir/usr/bin/bico
+
+          cat > AppDir/AppRun << 'EOF'
+          #!/bin/bash
+          SELF=$(readlink -f "$0")
+          HERE=${SELF%/*}
+          exec "${HERE}/usr/bin/bico" "$@"
+          EOF
+          chmod +x AppDir/AppRun
+
+          cat > AppDir/bico.desktop << 'EOF'
+          [Desktop Entry]
+          Name=Bico
+          Exec=bico
+          Icon=bico
+          Type=Application
+          Categories=AudioVideo;
+          EOF
+
+          cp assets/bico.png AppDir/bico.png
+          cp assets/bico.png AppDir/usr/share/icons/hicolor/256x256/apps/
+
+          APPIMAGE_NAME="bico-continuous-build${{ github.run_number }}-linux.AppImage"
+          ARCH=x86_64 ./appimagetool-x86_64.AppImage --appimage-extract-and-run AppDir "$APPIMAGE_NAME"
+          echo "APPIMAGE_NAME=$APPIMAGE_NAME" >> $GITHUB_ENV
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bico-linux-build${{ github.run_number }}
+          path: bico-*-linux.AppImage
+
+      - name: Release (tagged)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: bico-*-linux.AppImage
+          generate_release_notes: true
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\pip\Cache
+          key: pip-windows-${{ hashFiles('requirements.txt') }}
+          restore-keys: pip-windows-
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nuitka ordered-set
+
+      - name: Cache Nuitka
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\Nuitka\Nuitka\Cache
+          key: nuitka-windows-${{ hashFiles('**/*.py') }}
+          restore-keys: nuitka-windows-
+
+      - name: Compile with Nuitka
+        run: |
+          python -m nuitka `
+            --onefile `
+            --enable-plugin=pyside6 `
+            --include-qt-plugins=platforms `
+            --noinclude-qt-plugins=webkit,webengine,multimedia,sql,bluetooth,pdf,printsupport,3d,charts,datavisualization,purchasing,serialbus,serialport,positioning,sensors,nfc,gamepad,qml,qmltooling,networkinformation,tls,imageformats,iconengines `
+            --windows-console-mode=disable `
+            --output-filename=bico-build${{ github.run_number }}-windows.exe `
+            --remove-output `
+            --assume-yes-for-downloads `
+            main.py
+        env:
+          CL: /Zm400
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bico-windows-build${{ github.run_number }}
+          path: bico-build${{ github.run_number }}-windows.exe
+
+      - name: Release (tagged)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: bico-build${{ github.run_number }}-windows.exe
+          generate_release_notes: true
+
+  # ── Release continuo que junta ambas plataformas ──
+  release-continuous:
+    if: github.ref == 'refs/heads/main'
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: bico-linux-build${{ github.run_number }}
+          path: artifacts/linux
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: bico-windows-build${{ github.run_number }}
+          path: artifacts/windows
+
+      - name: Create/update continuous release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: continuous
+          name: "Continuous build #${{ github.run_number }}"
+          prerelease: true
+          allow_updates: true
+          files: |
+            artifacts/linux/*.AppImage
+            artifacts/windows/*.exe
+          body: |
+            **Build automático generado desde `main`**
+            Puede contener cambios no probados a fondo. Ideal para testear las últimas novedades.
+
+            - 🔹 Linux: AppImage  
+            - 🔹 Windows: ejecutable `.exe`
